@@ -1,12 +1,10 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 
-import {
-  type DomainStore,
-  DomainStoreError
-} from "../domain/store.js";
+import { type DomainStore, DomainStoreError } from "../domain/store.js";
 import {
   bookingAvailabilityInputSchema,
+  completeMaintenanceTaskInputSchema,
   createBookingReservationInputSchema,
   createMaintenanceTaskInputSchema,
   createOccupantInputSchema,
@@ -14,6 +12,8 @@ import {
   createPropertyInputSchema,
   createServiceRequestInputSchema,
   createUnitInputSchema,
+  scheduleMaintenanceTaskInputSchema,
+  triageServiceRequestInputSchema,
   updateMaintenanceTaskInputSchema,
   updateOccupantInputSchema,
   updateOwnerInputSchema,
@@ -21,6 +21,7 @@ import {
   updateServiceRequestInputSchema,
   updateUnitInputSchema
 } from "../domain/schema.js";
+import { createInspectionInputSchema } from "../inspections/schema.js";
 
 const entityParamsSchema = z.object({
   id: z.string().min(1)
@@ -28,11 +29,11 @@ const entityParamsSchema = z.object({
 
 type CrudConfig<TCreate, TUpdate, TEntity> = {
   basePath: string;
-  list: () => TEntity[];
-  get: (id: string) => TEntity;
-  create: (input: TCreate) => TEntity;
-  update: (id: string, input: TUpdate) => TEntity;
-  remove: (id: string) => void;
+  list: () => Promise<TEntity[]>;
+  get: (id: string) => Promise<TEntity>;
+  create: (input: TCreate) => Promise<TEntity>;
+  update: (id: string, input: TUpdate) => Promise<TEntity>;
+  remove: (id: string) => Promise<void>;
   createSchema: z.ZodType<TCreate>;
   updateSchema: z.ZodType<TUpdate>;
 };
@@ -41,7 +42,7 @@ export function registerDomainRoutes(
   app: FastifyInstance,
   store: DomainStore
 ): void {
-  app.get("/api/domain/meta", () => {
+  app.get("/api/domain/meta", async () => {
     return store.getMeta();
   });
 
@@ -56,9 +57,36 @@ export function registerDomainRoutes(
     updateSchema: updatePropertyInputSchema
   });
 
-  app.post("/api/properties/:id/archive", (request) => {
+  app.post("/api/properties/:id/archive", async (request) => {
     const { id } = entityParamsSchema.parse(request.params);
     return store.archiveProperty(id);
+  });
+
+  app.post("/api/properties/:id/inspections", async (request, reply) => {
+    const { id } = entityParamsSchema.parse(request.params);
+    const inspection = await store.createInspection(
+      id,
+      createInspectionInputSchema.parse(request.body)
+    );
+    return reply.status(201).send(inspection);
+  });
+
+  app.get("/api/properties/:id/inspections", async (request) => {
+    const { id } = entityParamsSchema.parse(request.params);
+    return {
+      items: await store.listPropertyInspections(id)
+    };
+  });
+
+  app.get("/api/properties/:id/quality-score", async (request) => {
+    const { id } = entityParamsSchema.parse(request.params);
+    return store.getPropertyQualityScore(id);
+  });
+
+  app.get("/api/inspections/alerts", async () => {
+    return {
+      items: await store.listInspectionAlerts()
+    };
   });
 
   registerCrudRoutes(app, {
@@ -105,6 +133,24 @@ export function registerDomainRoutes(
     updateSchema: updateServiceRequestInputSchema
   });
 
+  app.post("/api/service-requests/:id/triage", async (request) => {
+    const { id } = entityParamsSchema.parse(request.params);
+    return store.triageServiceRequest(
+      id,
+      triageServiceRequestInputSchema.parse(request.body ?? {})
+    );
+  });
+
+  app.post("/api/service-requests/:id/resolve", async (request) => {
+    const { id } = entityParamsSchema.parse(request.params);
+    return store.resolveServiceRequest(id);
+  });
+
+  app.post("/api/service-requests/:id/cancel", async (request) => {
+    const { id } = entityParamsSchema.parse(request.params);
+    return store.cancelServiceRequest(id);
+  });
+
   registerCrudRoutes(app, {
     basePath: "/api/maintenance-tasks",
     list: () => store.listMaintenanceTasks(),
@@ -116,20 +162,46 @@ export function registerDomainRoutes(
     updateSchema: updateMaintenanceTaskInputSchema
   });
 
-  app.post("/api/bookings/availability", (request) => {
+  app.post("/api/maintenance-tasks/:id/schedule", async (request) => {
+    const { id } = entityParamsSchema.parse(request.params);
+    return store.scheduleMaintenanceTask(
+      id,
+      scheduleMaintenanceTaskInputSchema.parse(request.body)
+    );
+  });
+
+  app.post("/api/maintenance-tasks/:id/start", async (request) => {
+    const { id } = entityParamsSchema.parse(request.params);
+    return store.startMaintenanceTask(id);
+  });
+
+  app.post("/api/maintenance-tasks/:id/complete", async (request) => {
+    const { id } = entityParamsSchema.parse(request.params);
+    return store.completeMaintenanceTask(
+      id,
+      completeMaintenanceTaskInputSchema.parse(request.body ?? {})
+    );
+  });
+
+  app.post("/api/maintenance-tasks/:id/cancel", async (request) => {
+    const { id } = entityParamsSchema.parse(request.params);
+    return store.cancelMaintenanceTask(id);
+  });
+
+  app.post("/api/bookings/availability", async (request) => {
     return store.checkBookingAvailability(
       bookingAvailabilityInputSchema.parse(request.body)
     );
   });
 
-  app.post("/api/bookings/reservations", (request, reply) => {
-    const reservation = store.createBookingReservation(
+  app.post("/api/bookings/reservations", async (request, reply) => {
+    const reservation = await store.createBookingReservation(
       createBookingReservationInputSchema.parse(request.body)
     );
     return reply.status(201).send(reservation);
   });
 
-  app.post("/api/bookings/reservations/:id/cancel", (request) => {
+  app.post("/api/bookings/reservations/:id/cancel", async (request) => {
     const { id } = entityParamsSchema.parse(request.params);
     return store.cancelBookingReservation(id);
   });
@@ -160,30 +232,32 @@ function registerCrudRoutes<TCreate, TUpdate, TEntity>(
   app: FastifyInstance,
   config: CrudConfig<TCreate, TUpdate, TEntity>
 ): void {
-  app.get(config.basePath, () => {
+  app.get(config.basePath, async () => {
     return {
-      items: config.list()
+      items: await config.list()
     };
   });
 
-  app.get(`${config.basePath}/:id`, (request) => {
+  app.get(`${config.basePath}/:id`, async (request) => {
     const { id } = entityParamsSchema.parse(request.params);
     return config.get(id);
   });
 
-  app.post(config.basePath, (request, reply) => {
-    const created = config.create(config.createSchema.parse(request.body));
+  app.post(config.basePath, async (request, reply) => {
+    const created = await config.create(
+      config.createSchema.parse(request.body)
+    );
     return reply.status(201).send(created);
   });
 
-  app.patch(`${config.basePath}/:id`, (request) => {
+  app.patch(`${config.basePath}/:id`, async (request) => {
     const { id } = entityParamsSchema.parse(request.params);
     return config.update(id, config.updateSchema.parse(request.body));
   });
 
-  app.delete(`${config.basePath}/:id`, (request, reply) => {
+  app.delete(`${config.basePath}/:id`, async (request, reply) => {
     const { id } = entityParamsSchema.parse(request.params);
-    config.remove(id);
+    await config.remove(id);
     return sendNoContent(reply);
   });
 }

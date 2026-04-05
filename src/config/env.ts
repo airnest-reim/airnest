@@ -5,7 +5,8 @@ const envSchema = z.object({
     .enum(["development", "test", "production"])
     .default("development"),
   HOST: z.string().default("0.0.0.0"),
-  PORT: z.coerce.number().int().positive().default(3000)
+  PORT: z.coerce.number().int().positive().default(3000),
+  DATABASE_URL: z.string().url().optional()
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

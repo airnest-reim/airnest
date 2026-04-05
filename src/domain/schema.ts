@@ -1,11 +1,19 @@
 import { z } from "zod";
 
+import { inspectionSchema } from "../inspections/schema.js";
+
 const isoDateTimeSchema = z.string().datetime({ offset: true });
+const isoDateSchema = z.string().date();
 
 export const propertyStatusSchema = z.enum(["draft", "active", "offboarded"]);
 export const ownerStatusSchema = z.enum(["lead", "active", "inactive"]);
 export const occupancyStatusSchema = z.enum(["vacant", "occupied", "turnover"]);
-export const leaseStatusSchema = z.enum(["prospect", "active", "ending", "former"]);
+export const leaseStatusSchema = z.enum([
+  "prospect",
+  "active",
+  "ending",
+  "former"
+]);
 export const requestCategorySchema = z.enum([
   "maintenance",
   "cleaning",
@@ -20,7 +28,14 @@ export const taskStatusSchema = z.enum([
   "done",
   "cancelled"
 ]);
-export const reservationStatusSchema = z.enum(["confirmed", "cancelled"]);
+export const reservationStatusSchema = z.enum([
+  "created",
+  "confirmed",
+  "checked_in",
+  "checked_out",
+  "reviewed",
+  "cancelled"
+]);
 export const requestStatusSchema = z.enum([
   "new",
   "triaged",
@@ -32,6 +47,47 @@ export const prioritySchema = z.enum(["low", "medium", "high", "urgent"]);
 
 const idSchema = z.string().min(1);
 
+export const blockedDateRangeSchema = z
+  .object({
+    startDate: isoDateSchema,
+    endDate: isoDateSchema,
+    reason: z.string().min(1).optional()
+  })
+  .refine((input) => input.startDate < input.endDate, {
+    message: "endDate must be after startDate.",
+    path: ["endDate"]
+  });
+
+export const seasonalPricingRuleSchema = z
+  .object({
+    startDate: isoDateSchema,
+    endDate: isoDateSchema,
+    multiplier: z.number().positive()
+  })
+  .refine((input) => input.startDate < input.endDate, {
+    message: "endDate must be after startDate.",
+    path: ["endDate"]
+  });
+
+export const lengthOfStayDiscountSchema = z.object({
+  minimumNights: z.number().int().positive(),
+  percentage: z.number().gt(0).lt(1)
+});
+
+export const propertyBookingPolicySchema = z.object({
+  currency: z.string().length(3).default("EUR"),
+  baseNightlyRate: z.number().nonnegative().default(110),
+  cleaningFee: z.number().nonnegative().default(45),
+  minimumStayNights: z.number().int().positive().default(2),
+  blockedRanges: z.array(blockedDateRangeSchema).default([]),
+  seasonalPricing: z.array(seasonalPricingRuleSchema).default([]),
+  lengthOfStayDiscounts: z.array(lengthOfStayDiscountSchema).default([])
+});
+
+export const defaultPropertyBookingPolicy = propertyBookingPolicySchema.parse(
+  {}
+);
+
 export const propertySchema = z.object({
   id: idSchema,
   code: z.string().min(2),
@@ -42,6 +98,9 @@ export const propertySchema = z.object({
   postalCode: z.string().min(1),
   countryCode: z.string().length(2),
   status: propertyStatusSchema,
+  bookingPolicy: propertyBookingPolicySchema.default(
+    defaultPropertyBookingPolicy
+  ),
   ownerIds: z.array(idSchema),
   unitIds: z.array(idSchema),
   createdAt: isoDateTimeSchema,
@@ -116,16 +175,31 @@ export const maintenanceTaskSchema = z.object({
   updatedAt: isoDateTimeSchema
 });
 
+export const bookingPricingSchema = z.object({
+  currency: z.string().length(3),
+  nights: z.number().int().positive(),
+  baseRateTotal: z.number(),
+  seasonalAdjustmentTotal: z.number(),
+  lengthOfStayDiscountTotal: z.number().nonnegative(),
+  cleaningFee: z.number().nonnegative(),
+  total: z.number()
+});
+
 export const bookingReservationSchema = z.object({
   id: idSchema,
   propertyId: idSchema,
   unitId: idSchema,
   guestName: z.string().min(1),
   guestEmail: z.string().email(),
-  startDate: z.string().date(),
-  endDate: z.string().date(),
+  startDate: isoDateSchema,
+  endDate: isoDateSchema,
   status: reservationStatusSchema,
+  pricing: bookingPricingSchema,
   externalReference: z.string().min(1).optional(),
+  confirmedAt: isoDateTimeSchema.optional(),
+  checkedInAt: isoDateTimeSchema.optional(),
+  checkedOutAt: isoDateTimeSchema.optional(),
+  reviewedAt: isoDateTimeSchema.optional(),
   cancelledAt: isoDateTimeSchema.optional(),
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema
@@ -134,14 +208,31 @@ export const bookingReservationSchema = z.object({
 export const bookingAvailabilityInputSchema = z
   .object({
     propertyId: idSchema,
-    unitId: idSchema.optional(),
-    startDate: z.string().date(),
-    endDate: z.string().date()
+    unitId: idSchema,
+    startDate: isoDateSchema,
+    endDate: isoDateSchema
   })
   .refine((input) => input.startDate < input.endDate, {
     message: "endDate must be after startDate.",
     path: ["endDate"]
   });
+
+export const propertyAvailabilityQuerySchema = z
+  .object({
+    unitId: idSchema,
+    startDate: isoDateSchema,
+    endDate: isoDateSchema
+  })
+  .refine((input) => input.startDate < input.endDate, {
+    message: "endDate must be after startDate.",
+    path: ["endDate"]
+  });
+
+export const bookingStatusUpdateInputSchema = z
+  .object({
+    status: reservationStatusSchema
+  })
+  .strict();
 
 export const domainSeedSchema = z.object({
   schemaVersion: z.string().min(1),
@@ -150,7 +241,8 @@ export const domainSeedSchema = z.object({
   units: z.array(unitSchema),
   occupants: z.array(occupantSchema),
   serviceRequests: z.array(serviceRequestSchema),
-  maintenanceTasks: z.array(maintenanceTaskSchema)
+  maintenanceTasks: z.array(maintenanceTaskSchema),
+  inspections: z.array(inspectionSchema).default([])
 });
 
 export const createPropertyInputSchema = propertySchema.omit({
@@ -168,11 +260,9 @@ export const createOwnerInputSchema = ownerSchema.omit({
   createdAt: true,
   updatedAt: true
 });
-export const updateOwnerInputSchema = createOwnerInputSchema
-  .partial()
-  .extend({
-    propertyIds: z.array(idSchema).optional()
-  });
+export const updateOwnerInputSchema = createOwnerInputSchema.partial().extend({
+  propertyIds: z.array(idSchema).optional()
+});
 
 export const createUnitInputSchema = unitSchema.omit({
   id: true,
@@ -194,21 +284,55 @@ export const createServiceRequestInputSchema = serviceRequestSchema.omit({
   createdAt: true,
   updatedAt: true
 });
-export const updateServiceRequestInputSchema =
-  createServiceRequestInputSchema.partial();
+export const updateServiceRequestInputSchema = createServiceRequestInputSchema
+  .omit({
+    status: true
+  })
+  .partial()
+  .strict();
 
 export const createMaintenanceTaskInputSchema = maintenanceTaskSchema.omit({
   id: true,
   createdAt: true,
   updatedAt: true
 });
-export const updateMaintenanceTaskInputSchema =
-  createMaintenanceTaskInputSchema.partial();
+export const updateMaintenanceTaskInputSchema = createMaintenanceTaskInputSchema
+  .omit({
+    status: true,
+    scheduledFor: true,
+    completedAt: true
+  })
+  .partial()
+  .strict();
+
+export const triageServiceRequestInputSchema = z
+  .object({
+    priority: prioritySchema.optional()
+  })
+  .strict();
+
+export const scheduleMaintenanceTaskInputSchema = z
+  .object({
+    assignee: z.string().min(1).optional(),
+    scheduledFor: isoDateTimeSchema
+  })
+  .strict();
+
+export const completeMaintenanceTaskInputSchema = z
+  .object({
+    resolveServiceRequest: z.boolean().default(false)
+  })
+  .strict();
 
 export const createBookingReservationInputSchema = bookingReservationSchema
   .omit({
     id: true,
     status: true,
+    pricing: true,
+    confirmedAt: true,
+    checkedInAt: true,
+    checkedOutAt: true,
+    reviewedAt: true,
     cancelledAt: true,
     createdAt: true,
     updatedAt: true
@@ -225,6 +349,11 @@ export type Occupant = z.infer<typeof occupantSchema>;
 export type ServiceRequest = z.infer<typeof serviceRequestSchema>;
 export type MaintenanceTask = z.infer<typeof maintenanceTaskSchema>;
 export type BookingReservation = z.infer<typeof bookingReservationSchema>;
+export type BookingPricing = z.infer<typeof bookingPricingSchema>;
+export type BlockedDateRange = z.infer<typeof blockedDateRangeSchema>;
+export type SeasonalPricingRule = z.infer<typeof seasonalPricingRuleSchema>;
+export type LengthOfStayDiscount = z.infer<typeof lengthOfStayDiscountSchema>;
+export type PropertyBookingPolicy = z.infer<typeof propertyBookingPolicySchema>;
 export type DomainSeed = z.infer<typeof domainSeedSchema>;
 
 export type CreatePropertyInput = z.infer<typeof createPropertyInputSchema>;
@@ -250,6 +379,21 @@ export type UpdateMaintenanceTaskInput = z.infer<
 export type BookingAvailabilityInput = z.infer<
   typeof bookingAvailabilityInputSchema
 >;
+export type PropertyAvailabilityQuery = z.infer<
+  typeof propertyAvailabilityQuerySchema
+>;
 export type CreateBookingReservationInput = z.infer<
   typeof createBookingReservationInputSchema
+>;
+export type BookingStatusUpdateInput = z.infer<
+  typeof bookingStatusUpdateInputSchema
+>;
+export type TriageServiceRequestInput = z.infer<
+  typeof triageServiceRequestInputSchema
+>;
+export type ScheduleMaintenanceTaskInput = z.infer<
+  typeof scheduleMaintenanceTaskInputSchema
+>;
+export type CompleteMaintenanceTaskInput = z.infer<
+  typeof completeMaintenanceTaskInputSchema
 >;

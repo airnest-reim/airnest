@@ -100,5 +100,6 @@ export const initialDomainSeed: DomainSeed = {
       createdAt: "2026-04-05T08:25:00.000Z",
       updatedAt: "2026-04-05T08:25:00.000Z"
     }
-  ]
+  ],
+  inspections: []
 };

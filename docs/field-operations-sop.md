@@ -14,12 +14,12 @@ It should be used by duty managers, local runners, cleaning partners, maintenanc
 
 ## Response Tiers
 
-| Tier | Typical Triggers | Dispatch Rule | Arrival Target | Completion Target |
-| --- | --- | --- | --- | --- |
-| Tier 1 | Lockout, access failure, missing key, urgent guest assist | Local runner or lockout support if remote recovery fails | 30 min | Same visit where possible |
-| Tier 2 | Cleaning failure, missing linen, consumables, minor reset tasks | Cleaning partner or runner once issue is visually confirmed | 60 min | 2 hours |
-| Tier 3 | No hot water, HVAC outage, appliance failure, Wi-Fi hardware issue | Maintenance vendor after remote troubleshooting | 90 min urgent / same day routine | 2 hours workaround, full repair per scope |
-| Tier 4 | Leak, electrical smell, fire concern, gas concern, unsafe condition | Emergency vendor and building contact immediately | Immediate dispatch | Emergency stabilization first |
+| Tier   | Typical Triggers                                                    | Dispatch Rule                                               | Arrival Target                   | Completion Target                         |
+| ------ | ------------------------------------------------------------------- | ----------------------------------------------------------- | -------------------------------- | ----------------------------------------- |
+| Tier 1 | Lockout, access failure, missing key, urgent guest assist           | Local runner or lockout support if remote recovery fails    | 30 min                           | Same visit where possible                 |
+| Tier 2 | Cleaning failure, missing linen, consumables, minor reset tasks     | Cleaning partner or runner once issue is visually confirmed | 60 min                           | 2 hours                                   |
+| Tier 3 | No hot water, HVAC outage, appliance failure, Wi-Fi hardware issue  | Maintenance vendor after remote troubleshooting             | 90 min urgent / same day routine | 2 hours workaround, full repair per scope |
+| Tier 4 | Leak, electrical smell, fire concern, gas concern, unsafe condition | Emergency vendor and building contact immediately           | Immediate dispatch               | Emergency stabilization first             |
 
 ## Dispatch Workflow
 

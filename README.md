@@ -41,8 +41,19 @@ The initial concierge backbone is modeled directly in the API with six resources
 - `service-requests`
 - `maintenance-tasks`
 
-Each resource supports `GET` list, `GET /:id`, `POST`, `PATCH /:id`, and `DELETE /:id`.
+Each resource supports `GET` list, `GET /:id`, `POST`, and `DELETE /:id`.
+Generic `PATCH /:id` remains available for non-lifecycle updates, but service request and maintenance status transitions are now workflow-driven.
 The server also exposes `GET /api/domain/meta` for the active schema version, seeded counts, and product open questions that still need operating guidance.
+
+Workflow endpoints:
+
+- `POST /api/service-requests/:id/triage` moves a request from `new` to `triaged`
+- `POST /api/service-requests/:id/resolve` closes a triaged or scheduled request
+- `POST /api/service-requests/:id/cancel` cancels an open request
+- `POST /api/maintenance-tasks/:id/schedule` assigns a scheduled execution window
+- `POST /api/maintenance-tasks/:id/start` moves a scheduled task into `in_progress`
+- `POST /api/maintenance-tasks/:id/complete` closes a scheduled or active task and can resolve the linked request
+- `POST /api/maintenance-tasks/:id/cancel` cancels an open task
 
 ## Property And Booking APIs
 
