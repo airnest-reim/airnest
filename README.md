@@ -63,11 +63,13 @@ Property management now includes a dedicated archive action:
 
 Booking integrations are available under `/api/bookings/*`:
 
-- `POST /api/bookings/availability` checks whether a unit is free for a date range
-- `POST /api/bookings/reservations` creates a confirmed reservation when no conflicts exist
-- `POST /api/bookings/reservations/:id/cancel` cancels an existing reservation and reopens availability
+- `GET /api/properties/:id/availability` returns unit availability, minimum-stay checks, blocked ranges, conflict reservations, and a pricing quote
+- `POST /api/bookings` creates a booking in `created` state with computed pricing when the stay is valid
+- `GET /api/bookings/:id` returns the booking record
+- `PATCH /api/bookings/:id/status` enforces the booking lifecycle: `created -> confirmed -> checked_in -> checked_out -> reviewed`
+- Legacy aliases remain available at `POST /api/bookings/availability`, `POST /api/bookings/reservations`, and `POST /api/bookings/reservations/:id/cancel`
 
-Booking payloads validate date windows (`startDate < endDate`), property and unit hierarchy, and reject reservations for archived properties.
+Booking payloads validate date windows (`startDate < endDate`), property and unit hierarchy, minimum stay, blocked date windows, lifecycle transitions, and reject reservations for archived properties.
 
 ## Delivery Notes
 

@@ -1,4 +1,5 @@
 import type {
+  BlockedDateRange,
   BookingAvailabilityInput,
   BookingPricing,
   BookingReservation,
@@ -59,11 +60,8 @@ export type BookingAvailabilityResult = {
   endDate: string;
   nights: number;
   meetsMinimumStay: boolean;
-  blockedRanges: Array<{
-    startDate: string;
-    endDate: string;
-    reason?: string;
-  }>;
+  minimumStayNights: number;
+  blockedRanges: BlockedDateRange[];
   available: boolean;
   conflicts: BookingReservation[];
   pricing: BookingPricing;

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
 import {
+  bookingPricingSchema,
   bookingReservationSchema,
   maintenanceTaskSchema,
   occupantSchema,
@@ -35,8 +36,23 @@ const errorSchema = z.object({
 });
 
 const bookingAvailabilityResponseSchema = z.object({
+  propertyId: z.string(),
+  unitId: z.string(),
+  startDate: z.string().date(),
+  endDate: z.string().date(),
+  nights: z.number().int().positive(),
+  meetsMinimumStay: z.boolean(),
+  minimumStayNights: z.number().int().positive(),
+  blockedRanges: z.array(
+    z.object({
+      startDate: z.string().date(),
+      endDate: z.string().date(),
+      reason: z.string().optional()
+    })
+  ),
   available: z.boolean(),
-  conflicts: z.array(bookingReservationSchema)
+  conflicts: z.array(bookingReservationSchema),
+  pricing: bookingPricingSchema
 });
 
 describe("concierge domain API", () => {
@@ -463,14 +479,29 @@ describe("concierge domain API", () => {
     });
 
     expect(availabilityResponse.statusCode).toBe(200);
-    expect(availabilityResponse.json()).toEqual({
-      available: true,
-      conflicts: []
-    });
+    expect(bookingAvailabilityResponseSchema.parse(availabilityResponse.json()))
+      .toMatchObject({
+        propertyId: "prop_lisboa_alfama",
+        unitId: "unit_alfama_2b",
+        available: true,
+        meetsMinimumStay: true,
+        minimumStayNights: 2,
+        blockedRanges: [],
+        conflicts: [],
+        pricing: {
+          currency: "EUR",
+          nights: 4,
+          baseRateTotal: 480,
+          seasonalAdjustmentTotal: 120,
+          lengthOfStayDiscountTotal: 0,
+          cleaningFee: 50,
+          total: 650
+        }
+      });
 
     const createResponse = await app.inject({
       method: "POST",
-      url: "/api/bookings/reservations",
+      url: "/api/bookings",
       payload: {
         propertyId: "prop_lisboa_alfama",
         unitId: "unit_alfama_2b",
@@ -484,6 +515,23 @@ describe("concierge domain API", () => {
 
     expect(createResponse.statusCode).toBe(201);
     const reservation = bookingReservationSchema.parse(createResponse.json());
+    expect(reservation).toMatchObject({
+      status: "created",
+      pricing: {
+        total: 650
+      }
+    });
+
+    const getResponse = await app.inject({
+      method: "GET",
+      url: `/api/bookings/${reservation.id}`
+    });
+
+    expect(getResponse.statusCode).toBe(200);
+    expect(bookingReservationSchema.parse(getResponse.json())).toMatchObject({
+      id: reservation.id,
+      status: "created"
+    });
 
     const conflictingAvailabilityResponse = await app.inject({
       method: "POST",
@@ -507,7 +555,7 @@ describe("concierge domain API", () => {
 
     const conflictingCreateResponse = await app.inject({
       method: "POST",
-      url: "/api/bookings/reservations",
+      url: "/api/bookings",
       payload: {
         propertyId: "prop_lisboa_alfama",
         unitId: "unit_alfama_2b",
@@ -522,6 +570,22 @@ describe("concierge domain API", () => {
     expect(errorSchema.parse(conflictingCreateResponse.json())).toEqual({
       error: "Booking reservation conflicts with an existing reservation."
     });
+
+    const confirmResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/bookings/${reservation.id}/status`,
+      payload: {
+        status: "confirmed"
+      }
+    });
+
+    expect(confirmResponse.statusCode).toBe(200);
+    expect(bookingReservationSchema.parse(confirmResponse.json())).toMatchObject(
+      {
+        id: reservation.id,
+        status: "confirmed"
+      }
+    );
 
     const cancelResponse = await app.inject({
       method: "POST",
@@ -552,7 +616,7 @@ describe("concierge domain API", () => {
       bookingAvailabilityResponseSchema.parse(
         reopenedAvailabilityResponse.json()
       )
-    ).toEqual({
+    ).toMatchObject({
       available: true,
       conflicts: []
     });
@@ -560,22 +624,60 @@ describe("concierge domain API", () => {
     await app.close();
   });
 
-  it("validates booking payloads and rejects archived properties", async () => {
+  it("enforces booking lifecycle transitions, minimum stay, and blocked dates", async () => {
     const app = buildApp();
 
     await app.ready();
 
-    await app.inject({
-      method: "POST",
-      url: "/api/properties/prop_lisboa_alfama/archive"
+    const minimumStayResponse = await app.inject({
+      method: "GET",
+      url: "/api/properties/prop_lisboa_alfama/availability",
+      query: {
+        unitId: "unit_alfama_2b",
+        startDate: "2026-04-12",
+        endDate: "2026-04-13"
+      }
     });
 
-    const archivedPropertyResponse = await app.inject({
+    expect(minimumStayResponse.statusCode).toBe(200);
+    expect(
+      bookingAvailabilityResponseSchema.parse(minimumStayResponse.json())
+    ).toMatchObject({
+      available: false,
+      meetsMinimumStay: false,
+      minimumStayNights: 2
+    });
+
+    const blockedDatesResponse = await app.inject({
+      method: "GET",
+      url: "/api/properties/prop_lisboa_alfama/availability",
+      query: {
+        unitId: "unit_alfama_2b",
+        startDate: "2026-05-01",
+        endDate: "2026-05-04"
+      }
+    });
+
+    expect(blockedDatesResponse.statusCode).toBe(200);
+    expect(
+      bookingAvailabilityResponseSchema.parse(blockedDatesResponse.json())
+    ).toMatchObject({
+      available: false,
+      blockedRanges: [
+        {
+          startDate: "2026-05-01",
+          endDate: "2026-05-03",
+          reason: "Owner stay"
+        }
+      ]
+    });
+
+    const createResponse = await app.inject({
       method: "POST",
-      url: "/api/bookings/reservations",
+      url: "/api/bookings",
       payload: {
         propertyId: "prop_lisboa_alfama",
-        unitId: "unit_alfama_1a",
+        unitId: "unit_alfama_2b",
         guestName: "Nora Jensen",
         guestEmail: "nora.jensen@example.com",
         startDate: "2026-07-01",
@@ -583,9 +685,64 @@ describe("concierge domain API", () => {
       }
     });
 
-    expect(archivedPropertyResponse.statusCode).toBe(400);
-    expect(errorSchema.parse(archivedPropertyResponse.json())).toEqual({
-      error: "Cannot create bookings for archived properties."
+    expect(createResponse.statusCode).toBe(201);
+    const reservation = bookingReservationSchema.parse(createResponse.json());
+
+    const invalidTransitionResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/bookings/${reservation.id}/status`,
+      payload: {
+        status: "checked_out"
+      }
+    });
+
+    expect(invalidTransitionResponse.statusCode).toBe(400);
+    expect(errorSchema.parse(invalidTransitionResponse.json())).toEqual({
+      error: "Cannot transition booking from created to checked_out."
+    });
+
+    const confirmResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/bookings/${reservation.id}/status`,
+      payload: {
+        status: "confirmed"
+      }
+    });
+
+    expect(confirmResponse.statusCode).toBe(200);
+
+    const checkInResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/bookings/${reservation.id}/status`,
+      payload: {
+        status: "checked_in"
+      }
+    });
+
+    expect(checkInResponse.statusCode).toBe(200);
+
+    const checkOutResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/bookings/${reservation.id}/status`,
+      payload: {
+        status: "checked_out"
+      }
+    });
+
+    expect(checkOutResponse.statusCode).toBe(200);
+
+    const reviewResponse = await app.inject({
+      method: "PATCH",
+      url: `/api/bookings/${reservation.id}/status`,
+      payload: {
+        status: "reviewed"
+      }
+    });
+
+    expect(reviewResponse.statusCode).toBe(200);
+    expect(bookingReservationSchema.parse(reviewResponse.json())).toMatchObject({
+      id: reservation.id,
+      status: "reviewed"
     });
 
     const invalidWindowResponse = await app.inject({
@@ -602,6 +759,47 @@ describe("concierge domain API", () => {
     expect(invalidWindowResponse.statusCode).toBe(400);
     expect(invalidWindowResponse.json()).toMatchObject({
       error: "Validation failed."
+    });
+
+    const blockedCreationResponse = await app.inject({
+      method: "POST",
+      url: "/api/bookings",
+      payload: {
+        propertyId: "prop_lisboa_alfama",
+        unitId: "unit_alfama_2b",
+        guestName: "Blocked Stay",
+        guestEmail: "blocked.stay@example.com",
+        startDate: "2026-05-01",
+        endDate: "2026-05-04"
+      }
+    });
+
+    expect(blockedCreationResponse.statusCode).toBe(400);
+    expect(errorSchema.parse(blockedCreationResponse.json())).toEqual({
+      error: "Booking dates overlap a blocked availability window."
+    });
+
+    await app.inject({
+      method: "POST",
+      url: "/api/properties/prop_lisboa_alfama/archive"
+    });
+
+    const archivedPropertyResponse = await app.inject({
+      method: "POST",
+      url: "/api/bookings",
+      payload: {
+        propertyId: "prop_lisboa_alfama",
+        unitId: "unit_alfama_1a",
+        guestName: "Archived Stay",
+        guestEmail: "archived.stay@example.com",
+        startDate: "2026-07-10",
+        endDate: "2026-07-13"
+      }
+    });
+
+    expect(archivedPropertyResponse.statusCode).toBe(400);
+    expect(errorSchema.parse(archivedPropertyResponse.json())).toEqual({
+      error: "Cannot create bookings for archived properties."
     });
 
     await app.close();

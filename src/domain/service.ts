@@ -40,14 +40,38 @@ import {
   scoreInspection,
   type PropertyQualityScore
 } from "../inspections/scoring.js";
+import type {
+  NotificationEvent,
+  NotificationRecipient
+} from "../notifications/schema.js";
 import type { DomainRepository } from "./repository.js";
-import { serviceRequestCreatedEventPayloadSchema } from "../outbox/schema.js";
+import type { EnqueueOutboxEventInput, OutboxEventTopic } from "../outbox/schema.js";
 import {
   DomainStoreError,
   type BookingAvailabilityResult,
   type DomainMeta,
   type DomainStore
 } from "./store.js";
+
+const defaultGuestNotificationSettings = {
+  locale: "en-PT",
+  timezone: "Europe/Lisbon",
+  supportPhone: "+351210000000",
+  checkInTime: "15:00",
+  checkOutTime: "11:00",
+  checkInInstructionTiming: "48 hours before arrival",
+  buildingAccessSteps: "Use the keypad code sent in your arrival message.",
+  unitAccessSteps: "Collect the keys from the lockbox beside the apartment door.",
+  wifiName: "AIRAA Guest",
+  wifiPassword: "sunny-lisbon",
+  quietHours: "22:00-08:00",
+  parkingInstructions: "Use the nearby public garage and follow posted signage.",
+  houseRulesLink: "https://example.com/rules",
+  towelLocation: "the bathroom hamper",
+  wasteInstructions: "the ground-floor recycling room",
+  keyReturnSteps: "the same lockbox used at check-in",
+  lateCheckoutCutoffTime: "18:00"
+} as const;
 
 type ServiceOptions = {
   repository: DomainRepository;
@@ -365,26 +389,13 @@ export class ConciergeDomainService implements DomainStore {
     };
 
     await this.repository.createServiceRequest(request);
-    await this.repository.enqueueOutboxEvent({
-      id: this.createId("outbox"),
-      topic: "service_request.created",
-      aggregateType: "service_request",
-      aggregateId: request.id,
-      payload: serviceRequestCreatedEventPayloadSchema.parse({
-        serviceRequestId: request.id,
-        propertyId: request.propertyId,
-        unitId: request.unitId,
-        occupantId: request.occupantId,
-        category: request.category,
-        priority: request.priority,
-        title: request.title,
-        reportedAt: request.reportedAt,
-        occurredAt: now
-      }),
-      availableAt: now,
-      createdAt: now,
-      updatedAt: now
-    });
+    await this.enqueueNotificationEvent(
+      "issue.created",
+      "service_request",
+      request.id,
+      await this.buildServiceRequestNotificationEvent(request, now),
+      now
+    );
     return this.getServiceRequest(request.id);
   }
 
@@ -638,6 +649,11 @@ export class ConciergeDomainService implements DomainStore {
     }
 
     await this.repository.updateBookingReservation(updated);
+
+    if (input.status === "confirmed") {
+      await this.enqueueBookingNotificationEvents(updated, now);
+    }
+
     return this.requireBookingReservation(id);
   }
 
@@ -1041,6 +1057,250 @@ export class ConciergeDomainService implements DomainStore {
 
   private roundCurrency(value: number): number {
     return Number(value.toFixed(2));
+  }
+
+  private async enqueueBookingNotificationEvents(
+    reservation: BookingReservation,
+    now: string
+  ): Promise<void> {
+    const confirmedEvent = await this.buildBookingNotificationEvent(
+      reservation,
+      "booking.confirmed",
+      now
+    );
+    const checkInReminder = await this.buildBookingNotificationEvent(
+      reservation,
+      "booking.check_in_instructions_requested",
+      now
+    );
+    const checkoutReminder = await this.buildBookingNotificationEvent(
+      reservation,
+      "booking.checkout_reminder_requested",
+      now
+    );
+
+    await this.enqueueNotificationEvent(
+      "booking.confirmed",
+      "booking_reservation",
+      reservation.id,
+      confirmedEvent,
+      now
+    );
+    await this.enqueueNotificationEvent(
+      "booking.checkin_approaching",
+      "booking_reservation",
+      reservation.id,
+      checkInReminder,
+      this.calculateCheckInReminderAvailableAt(reservation.startDate)
+    );
+    await this.enqueueNotificationEvent(
+      "booking.checkout_approaching",
+      "booking_reservation",
+      reservation.id,
+      checkoutReminder,
+      this.calculateCheckoutReminderAvailableAt(reservation.endDate)
+    );
+  }
+
+  private async enqueueNotificationEvent(
+    topic: OutboxEventTopic,
+    aggregateType: string,
+    aggregateId: string,
+    payload: NotificationEvent,
+    availableAt: string
+  ): Promise<void> {
+    const event: EnqueueOutboxEventInput = {
+      id: this.createId("outbox"),
+      topic,
+      aggregateType,
+      aggregateId,
+      payload,
+      availableAt,
+      createdAt: this.now(),
+      updatedAt: this.now()
+    };
+
+    await this.repository.enqueueOutboxEvent(event);
+  }
+
+  private async buildBookingNotificationEvent(
+    reservation: BookingReservation,
+    eventType: NotificationEvent["eventType"],
+    occurredAt: string
+  ): Promise<NotificationEvent> {
+    const property = await this.requireProperty(reservation.propertyId);
+    const recipient = this.buildRecipient({
+      fullName: reservation.guestName,
+      email: reservation.guestEmail
+    });
+    const propertyAddress = this.formatPropertyAddress(property);
+
+    if (eventType === "booking.confirmed") {
+      return {
+        eventType,
+        eventId: this.createId("notification"),
+        occurredAt,
+        reservationId: reservation.id,
+        propertyId: reservation.propertyId,
+        recipient,
+        channels: ["email"],
+        template: {
+          templateId: "booking_confirmation",
+          data: {
+            propertyName: property.name,
+            propertyAddress,
+            checkInDate: reservation.startDate,
+            checkOutDate: reservation.endDate,
+            guestCount: 1,
+            checkInTime: defaultGuestNotificationSettings.checkInTime,
+            checkOutTime: defaultGuestNotificationSettings.checkOutTime,
+            checkInInstructionTiming:
+              defaultGuestNotificationSettings.checkInInstructionTiming,
+            supportPhone: defaultGuestNotificationSettings.supportPhone
+          }
+        }
+      };
+    }
+
+    if (eventType === "booking.check_in_instructions_requested") {
+      return {
+        eventType,
+        eventId: this.createId("notification"),
+        occurredAt,
+        reservationId: reservation.id,
+        propertyId: reservation.propertyId,
+        recipient,
+        channels: ["email"],
+        template: {
+          templateId: "check_in_instructions",
+          data: {
+            propertyName: property.name,
+            propertyAddress,
+            checkInDate: reservation.startDate,
+            checkInTime: defaultGuestNotificationSettings.checkInTime,
+            buildingAccessSteps:
+              defaultGuestNotificationSettings.buildingAccessSteps,
+            unitAccessSteps: defaultGuestNotificationSettings.unitAccessSteps,
+            wifiName: defaultGuestNotificationSettings.wifiName,
+            wifiPassword: defaultGuestNotificationSettings.wifiPassword,
+            quietHours: defaultGuestNotificationSettings.quietHours,
+            parkingInstructions:
+              defaultGuestNotificationSettings.parkingInstructions,
+            houseRulesLink: defaultGuestNotificationSettings.houseRulesLink
+          }
+        }
+      };
+    }
+
+    return {
+      eventType,
+      eventId: this.createId("notification"),
+      occurredAt,
+      reservationId: reservation.id,
+      propertyId: reservation.propertyId,
+      recipient,
+      channels: ["email"],
+      template: {
+        templateId: "checkout_instructions",
+        data: {
+          propertyName: property.name,
+          checkOutTime: defaultGuestNotificationSettings.checkOutTime,
+          towelLocation: defaultGuestNotificationSettings.towelLocation,
+          wasteInstructions: defaultGuestNotificationSettings.wasteInstructions,
+          keyReturnSteps: defaultGuestNotificationSettings.keyReturnSteps,
+          lateCheckoutCutoffTime:
+            defaultGuestNotificationSettings.lateCheckoutCutoffTime
+        }
+      }
+    };
+  }
+
+  private async buildServiceRequestNotificationEvent(
+    request: ServiceRequest,
+    occurredAt: string
+  ): Promise<NotificationEvent> {
+    const property = await this.requireProperty(request.propertyId);
+    const occupant = request.occupantId
+      ? await this.repository.getOccupant(request.occupantId)
+      : null;
+    const recipient = this.buildRecipient({
+      fullName: occupant?.fullName ?? "Guest",
+      email: occupant?.email,
+      phone: occupant?.phone
+    });
+    const channels =
+      recipient.email && recipient.phone
+        ? ["email", "sms"]
+        : recipient.phone
+          ? ["sms"]
+          : ["email"];
+
+    return {
+      eventType: "service_request.reported",
+      eventId: this.createId("notification"),
+      occurredAt,
+      serviceRequestId: request.id,
+      propertyId: request.propertyId,
+      recipient,
+      channels,
+      template: {
+        templateId: "standard_issue_response",
+        data: {
+          issueType: request.title,
+          propertyName: property.name,
+          ownerRole: "Guest Operations",
+          nextAction: "We are triaging the request and assigning the right team.",
+          nextUpdateTime: "within 30 minutes",
+          supportPhone: defaultGuestNotificationSettings.supportPhone
+        }
+      }
+    };
+  }
+
+  private buildRecipient(input: {
+    fullName: string;
+    email?: string;
+    phone?: string;
+  }): NotificationRecipient {
+    const guestFirstName = input.fullName.split(/\s+/)[0] ?? input.fullName;
+
+    return {
+      guestFullName: input.fullName,
+      guestFirstName,
+      locale: defaultGuestNotificationSettings.locale,
+      timezone: defaultGuestNotificationSettings.timezone,
+      ...(input.email ? { email: input.email } : {}),
+      ...(input.phone ? { phone: input.phone } : {})
+    };
+  }
+
+  private formatPropertyAddress(property: Property): string {
+    return [
+      property.addressLine1,
+      property.addressLine2,
+      property.city,
+      property.postalCode
+    ]
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  private calculateCheckInReminderAvailableAt(startDate: string): string {
+    return this.shiftScheduledDateTime(startDate, -2, "15:00");
+  }
+
+  private calculateCheckoutReminderAvailableAt(endDate: string): string {
+    return this.shiftScheduledDateTime(endDate, -1, "18:00");
+  }
+
+  private shiftScheduledDateTime(
+    date: string,
+    dayOffset: number,
+    time: string
+  ): string {
+    const scheduled = new Date(`${date}T${time}:00.000Z`);
+    scheduled.setUTCDate(scheduled.getUTCDate() + dayOffset);
+    return scheduled.toISOString();
   }
 
   private ensureNoDependents(condition: boolean, message: string): void {

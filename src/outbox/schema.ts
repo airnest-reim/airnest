@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { NotificationEvent } from "../notifications/schema.js";
 
 const isoDateTimeSchema = z.string().datetime({ offset: true });
 
@@ -8,7 +9,12 @@ export const outboxEventStatusSchema = z.enum([
   "processed"
 ]);
 
-export const outboxEventTopicSchema = z.enum(["service_request.created"]);
+export const outboxEventTopicSchema = z.enum([
+  "booking.confirmed",
+  "booking.checkin_approaching",
+  "booking.checkout_approaching",
+  "issue.created"
+]);
 
 export const outboxEventSchema = z.object({
   id: z.string().min(1),
@@ -27,24 +33,10 @@ export const outboxEventSchema = z.object({
   updatedAt: isoDateTimeSchema
 });
 
-export const serviceRequestCreatedEventPayloadSchema = z.object({
-  serviceRequestId: z.string().min(1),
-  propertyId: z.string().min(1),
-  unitId: z.string().min(1).optional(),
-  occupantId: z.string().min(1).optional(),
-  category: z.string().min(1),
-  priority: z.string().min(1),
-  title: z.string().min(1),
-  reportedAt: isoDateTimeSchema,
-  occurredAt: isoDateTimeSchema
-});
-
 export type OutboxEvent = z.infer<typeof outboxEventSchema>;
 export type OutboxEventStatus = z.infer<typeof outboxEventStatusSchema>;
 export type OutboxEventTopic = z.infer<typeof outboxEventTopicSchema>;
-export type ServiceRequestCreatedEventPayload = z.infer<
-  typeof serviceRequestCreatedEventPayloadSchema
->;
+export type NotificationOutboxPayload = NotificationEvent;
 
 export type EnqueueOutboxEventInput = Pick<
   OutboxEvent,

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { type DomainStore, DomainStoreError } from "../domain/store.js";
 import {
   bookingAvailabilityInputSchema,
+  bookingStatusUpdateInputSchema,
   completeMaintenanceTaskInputSchema,
   createBookingReservationInputSchema,
   createMaintenanceTaskInputSchema,
@@ -12,6 +13,7 @@ import {
   createPropertyInputSchema,
   createServiceRequestInputSchema,
   createUnitInputSchema,
+  propertyAvailabilityQuerySchema,
   scheduleMaintenanceTaskInputSchema,
   triageServiceRequestInputSchema,
   updateMaintenanceTaskInputSchema,
@@ -81,6 +83,14 @@ export function registerDomainRoutes(
   app.get("/api/properties/:id/quality-score", async (request) => {
     const { id } = entityParamsSchema.parse(request.params);
     return store.getPropertyQualityScore(id);
+  });
+
+  app.get("/api/properties/:id/availability", async (request) => {
+    const { id } = entityParamsSchema.parse(request.params);
+    return store.getPropertyAvailability(
+      id,
+      propertyAvailabilityQuerySchema.parse(request.query)
+    );
   });
 
   app.get("/api/inspections/alerts", async () => {
@@ -189,8 +199,31 @@ export function registerDomainRoutes(
   });
 
   app.post("/api/bookings/availability", async (request) => {
-    return store.checkBookingAvailability(
-      bookingAvailabilityInputSchema.parse(request.body)
+    const input = bookingAvailabilityInputSchema.parse(request.body);
+    return store.getPropertyAvailability(input.propertyId, {
+      unitId: input.unitId,
+      startDate: input.startDate,
+      endDate: input.endDate
+    });
+  });
+
+  app.post("/api/bookings", async (request, reply) => {
+    const reservation = await store.createBookingReservation(
+      createBookingReservationInputSchema.parse(request.body)
+    );
+    return reply.status(201).send(reservation);
+  });
+
+  app.get("/api/bookings/:id", async (request) => {
+    const { id } = entityParamsSchema.parse(request.params);
+    return store.getBookingReservation(id);
+  });
+
+  app.patch("/api/bookings/:id/status", async (request) => {
+    const { id } = entityParamsSchema.parse(request.params);
+    return store.updateBookingReservationStatus(
+      id,
+      bookingStatusUpdateInputSchema.parse(request.body)
     );
   });
 

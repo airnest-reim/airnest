@@ -10,9 +10,13 @@ import type {
   ServiceRequest,
   Unit
 } from "../domain/schema.js";
+import {
+  bookingPricingSchema,
+  propertyBookingPolicySchema
+} from "../domain/schema.js";
 import type { Inspection } from "../inspections/schema.js";
 import type { DomainRepository } from "../domain/repository.js";
-import type { DomainCounts } from "../domain/store.js";
+import { DomainStoreError, type DomainCounts } from "../domain/store.js";
 import type {
   ClaimOutboxEventsInput,
   CompleteOutboxEventInput,
@@ -35,6 +39,7 @@ type PropertyRow = {
   postal_code: string;
   country_code: string;
   status: Property["status"];
+  booking_policy_json: unknown;
   created_at: Date | string;
   updated_at: Date | string;
 };
@@ -114,7 +119,12 @@ type BookingReservationRow = {
   start_date: string | Date;
   end_date: string | Date;
   status: BookingReservation["status"];
+  pricing_json: unknown;
   external_reference: string | null;
+  confirmed_at: Date | string | null;
+  checked_in_at: Date | string | null;
+  checked_out_at: Date | string | null;
+  reviewed_at: Date | string | null;
   cancelled_at: Date | string | null;
   created_at: Date | string;
   updated_at: Date | string;
@@ -263,6 +273,7 @@ export class PostgresDomainRepository implements DomainRepository {
         p.postal_code,
         p.country_code,
         p.status,
+        p.booking_policy_json,
         p.created_at,
         p.updated_at
       from properties p
@@ -285,6 +296,7 @@ export class PostgresDomainRepository implements DomainRepository {
           p.postal_code,
           p.country_code,
           p.status,
+          p.booking_policy_json,
           p.created_at,
           p.updated_at
         from properties p
@@ -301,8 +313,8 @@ export class PostgresDomainRepository implements DomainRepository {
       `
         insert into properties (
           id, code, name, address_line1, address_line2, city, postal_code,
-          country_code, status, created_at, updated_at
-        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+          country_code, status, booking_policy_json, created_at, updated_at
+        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       `,
       [
         property.id,
@@ -314,6 +326,7 @@ export class PostgresDomainRepository implements DomainRepository {
         property.postalCode,
         property.countryCode,
         property.status,
+        property.bookingPolicy,
         property.createdAt,
         property.updatedAt
       ]
@@ -332,7 +345,8 @@ export class PostgresDomainRepository implements DomainRepository {
             postal_code = $7,
             country_code = $8,
             status = $9,
-            updated_at = $10
+            booking_policy_json = $10,
+            updated_at = $11
         where id = $1
       `,
       [
@@ -345,6 +359,7 @@ export class PostgresDomainRepository implements DomainRepository {
         property.postalCode,
         property.countryCode,
         property.status,
+        property.bookingPolicy,
         property.updatedAt
       ]
     );
@@ -881,7 +896,12 @@ export class PostgresDomainRepository implements DomainRepository {
         start_date,
         end_date,
         status,
+        pricing_json,
         external_reference,
+        confirmed_at,
+        checked_in_at,
+        checked_out_at,
+        reviewed_at,
         cancelled_at,
         created_at,
         updated_at
@@ -904,7 +924,12 @@ export class PostgresDomainRepository implements DomainRepository {
           start_date,
           end_date,
           status,
+          pricing_json,
           external_reference,
+          confirmed_at,
+          checked_in_at,
+          checked_out_at,
+          reviewed_at,
           cancelled_at,
           created_at,
           updated_at
@@ -920,28 +945,80 @@ export class PostgresDomainRepository implements DomainRepository {
   async createBookingReservation(
     reservation: BookingReservation
   ): Promise<void> {
-    await this.pool.query(
-      `
-        insert into booking_reservations (
-          id, property_id, unit_id, guest_name, guest_email, start_date,
-          end_date, status, external_reference, cancelled_at, created_at, updated_at
-        ) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-      `,
-      [
-        reservation.id,
-        reservation.propertyId,
-        reservation.unitId,
-        reservation.guestName,
-        reservation.guestEmail,
-        reservation.startDate,
-        reservation.endDate,
-        reservation.status,
-        reservation.externalReference ?? null,
-        reservation.cancelledAt ?? null,
-        reservation.createdAt,
-        reservation.updatedAt
-      ]
-    );
+    const client = await this.pool.connect();
+
+    try {
+      await client.query("begin");
+      await client.query("select id from units where id = $1 for update", [
+        reservation.unitId
+      ]);
+
+      const conflict = await client.query<{ id: string }>(
+        `
+          select id
+          from booking_reservations
+          where property_id = $1
+            and unit_id = $2
+            and status <> 'cancelled'
+            and start_date < $4
+            and $3 < end_date
+          limit 1
+        `,
+        [
+          reservation.propertyId,
+          reservation.unitId,
+          reservation.startDate,
+          reservation.endDate
+        ]
+      );
+
+      if (conflict.rows[0]) {
+        throw new DomainStoreError(
+          "Booking reservation conflicts with an existing reservation.",
+          409
+        );
+      }
+
+      await client.query(
+        `
+          insert into booking_reservations (
+            id, property_id, unit_id, guest_name, guest_email, start_date,
+            end_date, status, pricing_json, external_reference, confirmed_at,
+            checked_in_at, checked_out_at, reviewed_at, cancelled_at, created_at,
+            updated_at
+          ) values (
+            $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+            $16, $17
+          )
+        `,
+        [
+          reservation.id,
+          reservation.propertyId,
+          reservation.unitId,
+          reservation.guestName,
+          reservation.guestEmail,
+          reservation.startDate,
+          reservation.endDate,
+          reservation.status,
+          reservation.pricing,
+          reservation.externalReference ?? null,
+          reservation.confirmedAt ?? null,
+          reservation.checkedInAt ?? null,
+          reservation.checkedOutAt ?? null,
+          reservation.reviewedAt ?? null,
+          reservation.cancelledAt ?? null,
+          reservation.createdAt,
+          reservation.updatedAt
+        ]
+      );
+
+      await client.query("commit");
+    } catch (error) {
+      await client.query("rollback");
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async updateBookingReservation(
@@ -957,9 +1034,14 @@ export class PostgresDomainRepository implements DomainRepository {
             start_date = $6,
             end_date = $7,
             status = $8,
-            external_reference = $9,
-            cancelled_at = $10,
-            updated_at = $11
+            pricing_json = $9,
+            external_reference = $10,
+            confirmed_at = $11,
+            checked_in_at = $12,
+            checked_out_at = $13,
+            reviewed_at = $14,
+            cancelled_at = $15,
+            updated_at = $16
         where id = $1
       `,
       [
@@ -971,7 +1053,12 @@ export class PostgresDomainRepository implements DomainRepository {
         reservation.startDate,
         reservation.endDate,
         reservation.status,
+        reservation.pricing,
         reservation.externalReference ?? null,
+        reservation.confirmedAt ?? null,
+        reservation.checkedInAt ?? null,
+        reservation.checkedOutAt ?? null,
+        reservation.reviewedAt ?? null,
         reservation.cancelledAt ?? null,
         reservation.updatedAt
       ]
@@ -1320,6 +1407,7 @@ function mapPropertyRow(
     postalCode: row.postal_code,
     countryCode: row.country_code,
     status: row.status,
+    bookingPolicy: propertyBookingPolicySchema.parse(row.booking_policy_json),
     ownerIds,
     unitIds,
     createdAt: toIsoString(row.created_at),
@@ -1455,12 +1543,29 @@ function mapBookingReservationRow(
     startDate: toDateString(row.start_date),
     endDate: toDateString(row.end_date),
     status: row.status,
+    pricing: bookingPricingSchema.parse(row.pricing_json),
     createdAt: toIsoString(row.created_at),
     updatedAt: toIsoString(row.updated_at)
   };
 
   if (row.external_reference) {
     reservation.externalReference = row.external_reference;
+  }
+
+  if (row.confirmed_at) {
+    reservation.confirmedAt = toIsoString(row.confirmed_at);
+  }
+
+  if (row.checked_in_at) {
+    reservation.checkedInAt = toIsoString(row.checked_in_at);
+  }
+
+  if (row.checked_out_at) {
+    reservation.checkedOutAt = toIsoString(row.checked_out_at);
+  }
+
+  if (row.reviewed_at) {
+    reservation.reviewedAt = toIsoString(row.reviewed_at);
   }
 
   if (row.cancelled_at) {

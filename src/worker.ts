@@ -12,7 +12,7 @@ async function start(): Promise<void> {
 
     const worker = new OutboxWorker({
       repository: platform.repository,
-      handlers: createDefaultOutboxHandlers(),
+      handlers: createDefaultOutboxHandlers(platform.repository),
       workerId: `worker:${process.pid}`
     });
     const result = await worker.runOnce();

@@ -154,5 +154,27 @@ export const postgresMigrations = [
       create index if not exists outbox_events_pending_idx
       on outbox_events (status, available_at, created_at);
     `
+  },
+  {
+    id: "20260405_004_booking_engine_expansion",
+    sql: `
+      alter table properties
+      add column if not exists booking_policy_json jsonb not null default '{}'::jsonb;
+
+      alter table booking_reservations
+      add column if not exists pricing_json jsonb not null default '{}'::jsonb;
+
+      alter table booking_reservations
+      add column if not exists confirmed_at timestamptz;
+
+      alter table booking_reservations
+      add column if not exists checked_in_at timestamptz;
+
+      alter table booking_reservations
+      add column if not exists checked_out_at timestamptz;
+
+      alter table booking_reservations
+      add column if not exists reviewed_at timestamptz;
+    `
   }
 ] as const;

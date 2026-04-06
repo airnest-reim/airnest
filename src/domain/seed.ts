@@ -12,6 +12,32 @@ export const initialDomainSeed: DomainSeed = {
       postalCode: "1100-453",
       countryCode: "PT",
       status: "active",
+      bookingPolicy: {
+        currency: "EUR",
+        baseNightlyRate: 120,
+        cleaningFee: 50,
+        minimumStayNights: 2,
+        blockedRanges: [
+          {
+            startDate: "2026-05-01",
+            endDate: "2026-05-03",
+            reason: "Owner stay"
+          }
+        ],
+        seasonalPricing: [
+          {
+            startDate: "2026-06-01",
+            endDate: "2026-09-01",
+            multiplier: 1.25
+          }
+        ],
+        lengthOfStayDiscounts: [
+          {
+            minimumNights: 7,
+            percentage: 0.1
+          }
+        ]
+      },
       ownerIds: ["owner_sofia_martins"],
       unitIds: ["unit_alfama_1a", "unit_alfama_2b"],
       createdAt: "2026-04-05T08:00:00.000Z",
