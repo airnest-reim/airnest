@@ -14,7 +14,13 @@ const envSchema = z.object({
   AIRTABLE_BOOKING_TABLE_ID: z.string().optional(),
   AIRTABLE_SERVICE_REQUEST_TABLE_ID: z.string().optional(),
   AIRTABLE_MAINTENANCE_TASK_TABLE_ID: z.string().optional(),
-  AIRTABLE_ALERT_TABLE_ID: z.string().optional()
+  AIRTABLE_ALERT_TABLE_ID: z.string().optional(),
+  RESEND_API_KEY: z.string().optional(),
+  RESEND_SENDER_EMAIL: z.string().email().optional(),
+  RESEND_SENDER_NAME: z.string().optional(),
+  TWILIO_ACCOUNT_SID: z.string().optional(),
+  TWILIO_AUTH_TOKEN: z.string().optional(),
+  TWILIO_PHONE_NUMBER: z.string().optional()
 });
 
 export type AppEnv = z.infer<typeof envSchema>;

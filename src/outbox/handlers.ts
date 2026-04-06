@@ -1,29 +1,35 @@
 import type { OutboxHandler } from "./worker.js";
 import type { OutboxEventTopic } from "./schema.js";
 import type { DomainRepository } from "../domain/repository.js";
+import type { AppEnv } from "../config/env.js";
 import {
   NotificationDispatcher,
-  createInMemoryNotificationTransports,
   notificationEventSchema
 } from "../notifications/index.js";
+import { createNotificationTransports } from "../notifications/transports.js";
 import { createAirtableSyncHandlers } from "../airtable/index.js";
 import type { AirtableConfig } from "../airtable/schema.js";
 
 export interface DefaultOutboxHandlersOptions {
   repository: DomainRepository;
   airtableConfig?: AirtableConfig | null | undefined;
+  env?: AppEnv;
 }
 
 export function createDefaultOutboxHandlers(
-  repository: DomainRepository | DefaultOutboxHandlersOptions
+  repository: DomainRepository | DefaultOutboxHandlersOptions,
+  env?: AppEnv
 ): Partial<Record<OutboxEventTopic, OutboxHandler>> {
   // Handle both old API (just repository) and new API (options object)
   const isRepository = "getProperty" in repository;
   const options: DefaultOutboxHandlersOptions = isRepository
-    ? { repository: repository as DomainRepository }
+    ? { repository: repository as DomainRepository, env }
     : (repository as DefaultOutboxHandlersOptions);
 
-  const transports = createInMemoryNotificationTransports();
+  // Use provided env or create a default one for transports
+  const transportEnv: AppEnv = options.env || { NODE_ENV: "development" } as AppEnv;
+
+  const transports = createNotificationTransports(transportEnv);
   const dispatcher = new NotificationDispatcher({
     emailTransport: transports.email,
     smsTransport: transports.sms

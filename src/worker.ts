@@ -36,7 +36,8 @@ async function start(): Promise<void> {
       repository: platform.repository,
       handlers: createDefaultOutboxHandlers({
         repository: platform.repository,
-        airtableConfig: airtableConfig || undefined
+        airtableConfig: airtableConfig || undefined,
+        env
       }),
       workerId: `worker:${process.pid}`
     });
