@@ -6,20 +6,44 @@ import {
   createInMemoryNotificationTransports,
   notificationEventSchema
 } from "../notifications/index.js";
+import { createAirtableSyncHandlers } from "../airtable/index.js";
+import type { AirtableConfig } from "../airtable/schema.js";
+
+export interface DefaultOutboxHandlersOptions {
+  repository: DomainRepository;
+  airtableConfig?: AirtableConfig | null | undefined;
+}
 
 export function createDefaultOutboxHandlers(
-  repository: DomainRepository
+  repository: DomainRepository | DefaultOutboxHandlersOptions
 ): Partial<Record<OutboxEventTopic, OutboxHandler>> {
+  // Handle both old API (just repository) and new API (options object)
+  const isRepository = "getProperty" in repository;
+  const options: DefaultOutboxHandlersOptions = isRepository
+    ? { repository: repository as DomainRepository }
+    : (repository as DefaultOutboxHandlersOptions);
+
   const transports = createInMemoryNotificationTransports();
   const dispatcher = new NotificationDispatcher({
     emailTransport: transports.email,
     smsTransport: transports.sms
   });
 
-  return createNotificationOutboxHandlers({
-    repository,
+  const handlers = createNotificationOutboxHandlers({
+    repository: options.repository,
     dispatcher
   });
+
+  // Merge Airtable sync handlers if configured
+  if (options.airtableConfig) {
+    const airtableHandlers = createAirtableSyncHandlers({
+      repository: options.repository,
+      airtableConfig: options.airtableConfig
+    });
+    Object.assign(handlers, airtableHandlers);
+  }
+
+  return handlers;
 }
 
 export function createNotificationOutboxHandlers(options: {

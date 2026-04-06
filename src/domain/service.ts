@@ -143,6 +143,7 @@ export class ConciergeDomainService implements DomainStore {
     };
 
     await this.repository.createProperty(property);
+    await this.enqueueAirtableSyncEvent("property.created", "property", property.id);
     return this.getProperty(property.id);
   }
 
@@ -165,6 +166,7 @@ export class ConciergeDomainService implements DomainStore {
     };
 
     await this.repository.updateProperty(updated);
+    await this.enqueueAirtableSyncEvent("property.updated", "property", id);
     return this.getProperty(id);
   }
 
@@ -190,6 +192,7 @@ export class ConciergeDomainService implements DomainStore {
       "Property has linked units, service requests, or maintenance tasks."
     );
     await this.repository.deleteProperty(id);
+    await this.enqueueAirtableSyncEvent("property.deleted", "property", id);
   }
 
   listOwners(): Promise<Owner[]> {
@@ -321,6 +324,7 @@ export class ConciergeDomainService implements DomainStore {
     };
 
     await this.repository.createOccupant(occupant);
+    await this.enqueueAirtableSyncEvent("occupant.created", "occupant", occupant.id);
     return this.getOccupant(occupant.id);
   }
 
@@ -345,6 +349,7 @@ export class ConciergeDomainService implements DomainStore {
     };
 
     await this.repository.updateOccupant(updated);
+    await this.enqueueAirtableSyncEvent("occupant.updated", "occupant", id);
     return this.getOccupant(id);
   }
 
@@ -356,6 +361,7 @@ export class ConciergeDomainService implements DomainStore {
       "Occupant has linked service requests."
     );
     await this.repository.deleteOccupant(id);
+    await this.enqueueAirtableSyncEvent("occupant.deleted", "occupant", id);
   }
 
   listServiceRequests(): Promise<ServiceRequest[]> {
@@ -601,6 +607,7 @@ export class ConciergeDomainService implements DomainStore {
 
     try {
       await this.repository.createBookingReservation(reservation);
+      await this.enqueueAirtableSyncEvent("booking.created", "booking", reservation.id);
     } catch (error) {
       if (error instanceof DomainStoreError) {
         throw error;
@@ -654,6 +661,8 @@ export class ConciergeDomainService implements DomainStore {
       await this.enqueueBookingNotificationEvents(updated, now);
     }
 
+    await this.enqueueAirtableSyncEvent("booking.updated", "booking", id);
+
     return this.requireBookingReservation(id);
   }
 
@@ -672,6 +681,8 @@ export class ConciergeDomainService implements DomainStore {
       cancelledAt: this.now(),
       updatedAt: this.now()
     });
+
+    await this.enqueueAirtableSyncEvent("booking.updated", "booking", id);
 
     return this.requireBookingReservation(id);
   }
@@ -1116,6 +1127,26 @@ export class ConciergeDomainService implements DomainStore {
       aggregateId,
       payload,
       availableAt,
+      createdAt: this.now(),
+      updatedAt: this.now()
+    };
+
+    await this.repository.enqueueOutboxEvent(event);
+  }
+
+  private async enqueueAirtableSyncEvent(
+    topic: OutboxEventTopic,
+    aggregateType: string,
+    aggregateId: string,
+    payload?: unknown
+  ): Promise<void> {
+    const event: EnqueueOutboxEventInput = {
+      id: this.createId("outbox"),
+      topic,
+      aggregateType,
+      aggregateId,
+      payload: payload || {},
+      availableAt: this.now(),
       createdAt: this.now(),
       updatedAt: this.now()
     };

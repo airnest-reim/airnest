@@ -7,6 +7,7 @@ import type {
 } from "./schema.js";
 import type { DomainRepository } from "../domain/repository.js";
 
+export type { OutboxEvent };
 export type OutboxHandler = (event: OutboxEvent) => Promise<void>;
 
 export type OutboxWorkerOptions = {
