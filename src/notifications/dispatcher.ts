@@ -25,11 +25,10 @@ export class NotificationDispatcher {
 
     for (const channel of parsed.channels) {
       const rendered = renderNotificationTemplate({
-        templateId: parsed.template.templateId,
         channel,
         recipient: parsed.recipient,
-        data: parsed.template.data
-      });
+        ...parsed.template
+      } as any);
 
       if (channel === "email") {
         if (!parsed.recipient.email) {

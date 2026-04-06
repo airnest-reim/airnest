@@ -14,21 +14,57 @@ Bootstrap repository for the concierge immobiliere application stack.
 
 ## Getting Started
 
-1. Copy `.env.example` to `.env` if you need local overrides.
-2. Install dependencies with `npm install`.
-3. Start the development server with `npm run dev`.
+### With Docker Compose (Recommended)
+
+```bash
+# Start the full stack (PostgreSQL + App)
+docker compose up
+
+# In another terminal, seed the database
+docker compose exec app npm run db:seed
+
+# The server is now running at http://localhost:3000
+```
+
+### Local Development
+
+1. Install Node.js 22+
+2. Install PostgreSQL 16+ (or use Docker: `docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=password postgres:16-alpine`)
+3. Copy `.env.example` to `.env` if you need local overrides:
+   ```bash
+   DATABASE_URL=postgresql://user:password@localhost:5432/airnest_dev
+   ```
+4. Install dependencies: `npm install`
+5. Apply migrations: `npm run db:migrate`
+6. Seed test data: `npm run db:seed`
+7. Start the development server: `npm run dev`
 
 The server exposes a health endpoint at `GET /health`.
 The concierge domain API is available under `/api/*` with seeded local data.
 
 ## Scripts
 
+### Development
+
 - `npm run dev` starts the API in watch mode.
+- `npm run dev:worker` starts the background worker in watch mode.
 - `npm run build` compiles the app into `dist/`.
 - `npm run start` runs the compiled build.
+- `npm run start:worker` runs the compiled worker.
+
+### Testing & Quality
+
 - `npm run lint` validates TypeScript and lint rules.
 - `npm run test` runs the test suite.
+- `npm run test:watch` runs tests in watch mode.
 - `npm run format` checks formatting.
+- `npm run format:write` fixes formatting issues.
+
+### Database
+
+- `npm run db:migrate` applies pending database migrations.
+- `npm run db:seed` seeds the database with test data.
+- `npm run db:reset` drops all tables and re-seeds (⚠️ destructive).
 
 ## Concierge Domain
 

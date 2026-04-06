@@ -1125,9 +1125,22 @@ export class ConciergeDomainService implements DomainStore {
 
   private async buildBookingNotificationEvent(
     reservation: BookingReservation,
-    eventType: NotificationEvent["eventType"],
+    eventType: Exclude<NotificationEvent["eventType"], "service_request.reported">,
     occurredAt: string
-  ): Promise<NotificationEvent> {
+  ): Promise<
+    Extract<
+      NotificationEvent,
+      { eventType: "booking.confirmed" }
+    > |
+    Extract<
+      NotificationEvent,
+      { eventType: "booking.check_in_instructions_requested" }
+    > |
+    Extract<
+      NotificationEvent,
+      { eventType: "booking.checkout_reminder_requested" }
+    >
+  > {
     const property = await this.requireProperty(reservation.propertyId);
     const recipient = this.buildRecipient({
       fullName: reservation.guestName,
@@ -1218,17 +1231,17 @@ export class ConciergeDomainService implements DomainStore {
   private async buildServiceRequestNotificationEvent(
     request: ServiceRequest,
     occurredAt: string
-  ): Promise<NotificationEvent> {
+  ): Promise<Extract<NotificationEvent, { eventType: "service_request.reported" }>> {
     const property = await this.requireProperty(request.propertyId);
     const occupant = request.occupantId
       ? await this.repository.getOccupant(request.occupantId)
       : null;
     const recipient = this.buildRecipient({
       fullName: occupant?.fullName ?? "Guest",
-      email: occupant?.email,
-      phone: occupant?.phone
+      ...(occupant?.email !== undefined && { email: occupant.email }),
+      ...(occupant?.phone !== undefined && { phone: occupant.phone })
     });
-    const channels =
+    const channels: ("email" | "sms")[] =
       recipient.email && recipient.phone
         ? ["email", "sms"]
         : recipient.phone
