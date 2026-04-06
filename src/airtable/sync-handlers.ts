@@ -327,9 +327,30 @@ async function syncServiceRequestToAirtable(
       return;
     }
 
-    // TODO: Implement service request retrieval from repository
-    // For now, this is a placeholder that will be implemented once the domain model is available
-    logger?.log(`Service request ${event.aggregateId} sync placeholder (${action})`);
+    const serviceRequest = await repository.getServiceRequest(event.aggregateId);
+
+    if (!serviceRequest) {
+      logger?.log(`Service request ${event.aggregateId} not found, skipping sync`);
+      return;
+    }
+
+    const fields = {
+      "Service Request ID": serviceRequest.id,
+      "Property ID": serviceRequest.propertyId,
+      "Unit ID": serviceRequest.unitId || "",
+      "Occupant ID": serviceRequest.occupantId || "",
+      Category: serviceRequest.category,
+      Priority: serviceRequest.priority,
+      Status: serviceRequest.status,
+      Title: serviceRequest.title,
+      Description: serviceRequest.description,
+      "Reported At": serviceRequest.reportedAt,
+      "Last Synced": new Date().toISOString()
+    };
+
+    await client.upsertRecord(config.serviceRequestTableId, fields, serviceRequest.id);
+
+    logger?.log(`Service request ${serviceRequest.id} synced to Airtable (${action})`);
   } catch (error) {
     logger?.error(
       `Failed to sync service request ${event.aggregateId}: ${error instanceof Error ? error.message : "Unknown error"}`
@@ -389,9 +410,30 @@ async function syncMaintenanceTaskToAirtable(
       return;
     }
 
-    // TODO: Implement maintenance task retrieval from repository
-    // For now, this is a placeholder that will be implemented once the domain model is available
-    logger?.log(`Maintenance task ${event.aggregateId} sync placeholder (${action})`);
+    const maintenanceTask = await repository.getMaintenanceTask(event.aggregateId);
+
+    if (!maintenanceTask) {
+      logger?.log(`Maintenance task ${event.aggregateId} not found, skipping sync`);
+      return;
+    }
+
+    const fields = {
+      "Task ID": maintenanceTask.id,
+      "Service Request ID": maintenanceTask.serviceRequestId || "",
+      "Property ID": maintenanceTask.propertyId,
+      "Unit ID": maintenanceTask.unitId || "",
+      Summary: maintenanceTask.summary,
+      Assignee: maintenanceTask.assignee,
+      Priority: maintenanceTask.priority,
+      Status: maintenanceTask.status,
+      "Scheduled For": maintenanceTask.scheduledFor || "",
+      "Completed At": maintenanceTask.completedAt || "",
+      "Last Synced": new Date().toISOString()
+    };
+
+    await client.upsertRecord(config.maintenanceTaskTableId, fields, maintenanceTask.id);
+
+    logger?.log(`Maintenance task ${maintenanceTask.id} synced to Airtable (${action})`);
   } catch (error) {
     logger?.error(
       `Failed to sync maintenance task ${event.aggregateId}: ${error instanceof Error ? error.message : "Unknown error"}`
@@ -436,6 +478,11 @@ async function deleteMaintenanceTaskFromAirtable(
 
 /**
  * Syncs an alert to Airtable
+ *
+ * Note: Alert domain model is pending. Once defined, implement:
+ * 1. getAlert() method in DomainRepository
+ * 2. Fetch alert data using repository.getAlert(event.aggregateId)
+ * 3. Map alert fields to Airtable record structure
  */
 async function syncAlertToAirtable(
   event: OutboxEvent,
@@ -450,9 +497,8 @@ async function syncAlertToAirtable(
       return;
     }
 
-    // TODO: Implement alert retrieval from repository
-    // For now, this is a placeholder that will be implemented once the domain model is available
-    logger?.log(`Alert ${event.aggregateId} sync placeholder`);
+    // Alert domain model not yet implemented - placeholder for future work
+    logger?.log(`Alert ${event.aggregateId} sync skipped - domain model pending`);
   } catch (error) {
     logger?.error(
       `Failed to sync alert ${event.aggregateId}: ${error instanceof Error ? error.message : "Unknown error"}`

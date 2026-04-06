@@ -395,6 +395,7 @@ export class ConciergeDomainService implements DomainStore {
     };
 
     await this.repository.createServiceRequest(request);
+    await this.enqueueAirtableSyncEvent("service_request.created", "service_request", request.id);
     await this.enqueueNotificationEvent(
       "issue.created",
       "service_request",
@@ -444,6 +445,8 @@ export class ConciergeDomainService implements DomainStore {
       updatedAt: this.now()
     });
 
+    await this.enqueueAirtableSyncEvent("service_request.updated", "service_request", id);
+
     return this.getServiceRequest(id);
   }
 
@@ -455,6 +458,7 @@ export class ConciergeDomainService implements DomainStore {
       "Service request has linked maintenance tasks."
     );
     await this.repository.deleteServiceRequest(id);
+    await this.enqueueAirtableSyncEvent("service_request.deleted", "service_request", id);
   }
 
   listMaintenanceTasks(): Promise<MaintenanceTask[]> {
@@ -488,6 +492,7 @@ export class ConciergeDomainService implements DomainStore {
     };
 
     await this.repository.createMaintenanceTask(task);
+    await this.enqueueAirtableSyncEvent("maintenance_task.created", "maintenance_task", task.id);
     return this.getMaintenanceTask(task.id);
   }
 
@@ -539,11 +544,14 @@ export class ConciergeDomainService implements DomainStore {
       updatedAt: this.now()
     });
 
+    await this.enqueueAirtableSyncEvent("maintenance_task.updated", "maintenance_task", id);
+
     return this.getMaintenanceTask(id);
   }
 
-  deleteMaintenanceTask(id: string): Promise<void> {
-    return this.repository.deleteMaintenanceTask(id);
+  async deleteMaintenanceTask(id: string): Promise<void> {
+    await this.repository.deleteMaintenanceTask(id);
+    await this.enqueueAirtableSyncEvent("maintenance_task.deleted", "maintenance_task", id);
   }
 
   async checkBookingAvailability(
