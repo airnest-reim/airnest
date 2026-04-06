@@ -13,7 +13,23 @@ export const outboxEventTopicSchema = z.enum([
   "booking.confirmed",
   "booking.checkin_approaching",
   "booking.checkout_approaching",
-  "issue.created"
+  "issue.created",
+  "property.created",
+  "property.updated",
+  "property.deleted",
+  "booking.created",
+  "booking.updated",
+  "booking.deleted",
+  "occupant.created",
+  "occupant.updated",
+  "occupant.deleted",
+  "service_request.created",
+  "service_request.updated",
+  "service_request.deleted",
+  "maintenance_task.created",
+  "maintenance_task.updated",
+  "maintenance_task.deleted",
+  "alert.created"
 ]);
 
 export const outboxEventSchema = z.object({
