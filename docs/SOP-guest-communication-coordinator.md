@@ -8,8 +8,8 @@
 | Person | Role | When to contact |
 |--------|------|-----------------|
 | **Liaz** | Guest Comm Coordinator | First point of contact for all guest issues |
-| **Kim** | Property Manager | Any property/quality/cleaning issue requiring on-site action |
-| **Cleaning team leads** | Cleaning execution | Via Kim only — never contact directly |
+| **Kim** | Property Manager | Property/quality issues requiring on-site action or decisions beyond Liaz's scope |
+| **Cleaning team leads** | Cleaning execution | Via WhatsApp group (Liaz is member) — for cleaning & linen issues |
 | **Jazz** | Back Office | Invoices, refunds to process, booking admin, platform disputes |
 | **Corentin** | COO | Physical safety, legal risk, major refund decision, strategy only |
 
@@ -83,14 +83,15 @@
 - **Severity:** High
 - **First response:** < 5 min
 - **Resolution:** < 2 h (reclean dispatched)
-- **Owner:** Liaz → Kim
+- **Owner:** Liaz → Cleaning team → Kim if unresolved
 - **Steps:**
   1. Apologize briefly, ask guest to send 2–3 photos
-  2. Contact Kim immediately with property name + photos
-  3. Kim contacts cleaning team lead to dispatch emergency reclean
-  4. Give guest realistic ETA (do not promise under 1 h without Kim confirmation)
-  5. If guest refuses to wait: escalate to Kim for relocation or compensation decision
-- **Escalate to Kim:** Immediately — do not attempt to solve without her
+  2. Message the cleaning WhatsApp group with property name, photos, and urgency
+  3. Confirm ETA directly with the cleaning team lead who responds
+  4. Give guest that ETA — do not promise under 1 h without cleaner confirmation
+  5. If no cleaner responds within 15 min: escalate to Kim
+  6. If guest refuses to wait: escalate to Kim for relocation or compensation decision
+- **Escalate to Kim:** If cleaning team doesn't respond in 15 min, or if guest demands relocation/compensation
 
 ---
 
@@ -99,13 +100,14 @@
 - **Severity:** Medium
 - **First response:** < 5 min
 - **Resolution:** < 2 h
-- **Owner:** Liaz → Kim
+- **Owner:** Liaz → Cleaning team → Kim if unresolved
 - **Steps:**
   1. Confirm exactly what is missing (sheets, towels, pillowcases, quantity)
-  2. Contact Kim — she coordinates delivery via cleaning team
-  3. Give guest ETA confirmed by Kim
-  4. Follow up once delivery is confirmed
-- **Escalate to Kim:** Any linen/laundry issue goes through Kim
+  2. Message the cleaning WhatsApp group with property name and what is needed
+  3. Confirm delivery ETA directly with the cleaner who responds
+  4. Give guest that ETA
+  5. Follow up once delivery is confirmed
+- **Escalate to Kim:** If cleaning team doesn't respond in 15 min
 
 ---
 
@@ -151,7 +153,7 @@
 - **Steps:**
   1. Ask: is there any warm water or completely cold?
   2. Check if it is a building-wide outage (ask if neighbors affected)
-  3. Contact Kim immediately — she contacts maintenance
+  3. Contact Kim immediately — he contacts maintenance
   4. If repair exceeds 12 h: Corentin decides on compensation or relocation
 - **Escalate to Kim:** Immediately
 
@@ -166,7 +168,7 @@
 - **Steps:**
   1. Identify the appliance and the impact on the stay
   2. Provide a workaround if possible (nearest laundromat, supermarket nearby)
-  3. Contact Kim — she assesses urgency and dispatches repair
+  3. Contact Kim — he assesses urgency and dispatches repair
   4. For long stays (3+ nights) with broken fridge: Corentin approves compensation
 - **Escalate to Kim:** Any appliance requiring on-site repair
 
@@ -379,7 +381,7 @@
 | Situation | Contact |
 |-----------|---------|
 | Access, lockbox, lost key | Kim (if Liaz cannot resolve remotely) |
-| Cleaning, linen, towels | Kim |
+| Cleaning, linen, towels | Cleaning WhatsApp group (→ Kim if no response) |
 | Maintenance (heating, water, appliances) | Kim |
 | Parking, lost in neighborhood | Kim |
 | Refund, invoice, platform dispute | Jazz |
